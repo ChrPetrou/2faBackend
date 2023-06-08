@@ -12,6 +12,13 @@ const JoiExtended = Joi.extend(JoiPhoneNumber);
 const router = express.Router();
 const userModel = require("../models/userModel");
 
+const signInSchema = JoiExtended.object({
+  email: Joi.string()
+    .email({ tlds: { allow: ["com", "net"] } })
+    .required(),
+  password: Joi.string().pattern(new RegExp(`^[a-zA-Z0-9]{3,30}`)).required(),
+});
+
 const registerSchema = JoiExtended.object({
   firstname: Joi.string().required(),
   surname: Joi.string().required(),
@@ -63,13 +70,24 @@ router.post("/register", async (req, res) => {
   //       body: "Your 2FA code is: 123456", // Replace with your actSual 2FA code
   //     });
   //   } catch (error) {
-  //     console.error("Failed to send SMS:", error);
   //     return res.status(500).json({ error: "Failed to send SMS" });
   //   }
   const user = newUser.toJSON();
   return res.status(200).json({ message: user });
 });
 
-router.post("/sign-in", async (req, res) => {});
+router.post("/sign-in", async (req, res) => {
+  const { error, value } = signInSchema.validate(req.body);
+  const existingUser = await userModel
+    .findOne({ email: value.email })
+    .catch((err) => {});
+  if (!existingUser) {
+    res.status(404).json({ message: "User not found" });
+    return;
+  }
+
+  const user = existingUser.toJSON();
+  return res.status(200).json({ message: user });
+});
 
 module.exports = router;
