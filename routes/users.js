@@ -2,16 +2,17 @@ const express = require("express");
 const Joi = require("joi");
 const bcrypt = require("bcrypt");
 const JoiPhoneNumber = require("joi-phone-number");
+const { getCodes } = require("iso-3166-1-alpha-2");
 const twilio = require("twilio");
 require("dotenv").config();
 
 const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_TOKEN);
-// Extend Joi with the joi-phone-number extension
+
 const JoiExtended = Joi.extend(JoiPhoneNumber);
 const router = express.Router();
 const userModel = require("../models/userModel");
 
-const registerSchema = Joi.object({
+const registerSchema = JoiExtended.object({
   firstname: Joi.string().required(),
   surname: Joi.string().required(),
   email: Joi.string()
@@ -19,7 +20,16 @@ const registerSchema = Joi.object({
     .required(),
   password: Joi.string().pattern(new RegExp(`^[a-zA-Z0-9]{3,30}`)).required(),
   confirmPassword: Joi.string().valid(Joi.ref("password")).required(),
-  phone: JoiExtended.string().phoneNumber().default("US"),
+  country: Joi.string()
+    .valid(...getCodes())
+    .required(),
+  phone: JoiExtended.string().phoneNumber({
+    defaultCountry: Joi.ref("country", {
+      adjust: (value) => value.toUpperCase(),
+    }),
+    format: "e164",
+    strict: true,
+  }),
 });
 
 router.post("/register", async (req, res) => {
@@ -27,19 +37,21 @@ router.post("/register", async (req, res) => {
   const { error, value } = registerSchema.validate(req.body);
   if (error) {
     res.status(400).json(error);
+    return error;
   }
 
   const hash = await bcrypt.hash(value.password, saltRounds);
-  console.log(hash);
+
   const newUser = await userModel
     .create({
-      firstname: value.firstname,
-      surname: value.surname,
+      firstName: value.firstname,
+      lastName: value.surname,
       email: value.email,
       phone: value.phone,
       password: hash,
     })
-    .catch((err) => {});
+    .catch((err) => {}); // to catch error
+
   if (!newUser) {
     res.status(403).json({ message: "Email Already exist" });
     return;
@@ -48,14 +60,16 @@ router.post("/register", async (req, res) => {
   //     await twilioClient.messages.create({
   //       to: phone,
   //       from: process.env.TWILIO_PHONE,
-  //       body: "Your 2FA code is: 123456", // Replace with your actual 2FA code
+  //       body: "Your 2FA code is: 123456", // Replace with your actSual 2FA code
   //     });
   //   } catch (error) {
   //     console.error("Failed to send SMS:", error);
   //     return res.status(500).json({ error: "Failed to send SMS" });
   //   }
   const user = newUser.toJSON();
-  return res.status(200).json({ user });
+  return res.status(200).json({ message: user });
 });
+
+router.post("/sign-in", async (req, res) => {});
 
 module.exports = router;

@@ -13,11 +13,11 @@ const UserSchema = new Schema({
     unique: true,
   },
   phone: {
-    type: Number,
+    type: String,
     required: true,
   },
 });
 
-const userModel = model("2FAUser", UserSchema);
+const userModel = model("user", UserSchema);
 
 module.exports = userModel;

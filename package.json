@@ -14,9 +14,9 @@
     "cors": "^2.8.5",
     "dotenv": "^16.1.4",
     "express": "^4.18.2",
+    "iso-3166-1-alpha-2": "^1.0.1",
     "joi": "^17.9.2",
     "joi-phone-number": "^5.1.1",
-    "libphonenumber-js": "^1.10.34",
     "mongoose": "^7.2.2",
     "twilio": "^4.11.2"
   }
