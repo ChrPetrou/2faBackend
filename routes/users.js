@@ -133,7 +133,7 @@ router.post("/authanticate", async (req, res) => {
   const user = await userModel.findByIdAndUpdate(
     authanticate.user_id,
     {
-      isAuthanticated: true,
+      isAuthanticated: false,
     },
     { returnDocument: "after" }
   );
@@ -151,8 +151,17 @@ router.post("/sign-in", async (req, res) => {
   const existingUser = await userModel
     .findOne({ email: value.email })
     .catch((err) => {});
+
   if (!existingUser) {
-    returnres.status(404).json({ message: "User not found" });
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  if (existingUser.isAuthanticated === false) {
+    const deletedUser = await userModel.findOneAndDelete({
+      _id: existingUser.userId,
+    });
+
+    return res.status(404).json({ message: "User not found" });
   }
 
   //compare passwords
@@ -161,6 +170,17 @@ router.post("/sign-in", async (req, res) => {
     res.status(403).json({ message: "Wrong Password" });
     return;
   }
+
+  // try {
+  //   await twilioClient.messages.create({
+  //     to: phone,
+  //     from: process.env.TWILIO_PHONE,
+  //     body: `Your 2FA code is: ${verificationCode}`, // Replace with your actSual 2FA code
+  //   });
+  // } catch (error) {
+  //   return res.status(500).json({ error: "Failed to send SMS" });
+  // }
+
   const user = existingUser.toJSON();
   return res.status(200).json({ message: user });
 });
