@@ -18,6 +18,11 @@
     "joi": "^17.9.2",
     "joi-phone-number": "^5.1.1",
     "mongoose": "^7.2.2",
-    "twilio": "^4.11.2"
+    "speakeasy": "^2.0.0",
+    "twilio": "^4.11.2",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
   }
 }
