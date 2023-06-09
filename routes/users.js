@@ -158,9 +158,9 @@ router.post("/sign-in", async (req, res) => {
 
   if (existingUser.isAuthanticated === false) {
     const deletedUser = await userModel.findOneAndDelete({
-      _id: existingUser.userId,
+      _id: existingUser._id,
     });
-
+    console.log(deletedUser);
     return res.status(404).json({ message: "User not found" });
   }
 
