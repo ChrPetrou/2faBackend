@@ -12,7 +12,8 @@ const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_TOKEN);
 
 const JoiExtended = Joi.extend(JoiPhoneNumber);
 const router = express.Router();
-const userModel = require("../models/userModel");
+const nonAuthUserModel = require("../models/nonAuthUserModel");
+const AuthUserModel = require("../models/authUserModel");
 const tokenModel = require("../models/tokenModel");
 
 const signInSchema = JoiExtended.object({
@@ -64,7 +65,14 @@ router.post("/register", async (req, res) => {
 
   const hash = await bcrypt.hash(value.password, saltRounds);
 
-  const newUser = await userModel
+  const existingUser = await AuthUserModel.findOne({ email: value.email });
+  //check if email exist in auth Users
+  if (existingUser) {
+    res.status(403).json({ message: "Email Already exist" });
+    return;
+  }
+  //create a new register user
+  const newUser = await nonAuthUserModel
     .create({
       firstName: value.firstname,
       lastName: value.surname,
@@ -76,7 +84,7 @@ router.post("/register", async (req, res) => {
     .catch((err) => {}); // to catch error
 
   if (!newUser) {
-    res.status(403).json({ message: "Email Already exist" });
+    res.status(403).json({ message: "Something Went Wrong" });
     return;
   }
 
@@ -108,7 +116,7 @@ router.post("/register", async (req, res) => {
   const user = newUser.toJSON();
 
   return res.status(200).json({
-    user: user,
+    user: newUser,
     token: newToken,
     token_id: newToken.token,
     expire_at: newToken.expire_at,
@@ -116,33 +124,77 @@ router.post("/register", async (req, res) => {
   });
 });
 
-router.post("/authanticate", async (req, res) => {
+router.post("/authanticate/:id", async (req, res) => {
   const { error, value } = authSchema.validate(req.body);
+
+  const authanticate = await tokenModel.findOne({ user_id: req.params.id });
+  //check if token exist
+  if (!authanticate) {
+    res.status(404).json({ message: "Code is either wrong or doesnt exist" });
+    return;
+  }
+
+  //check if the code is correct
+  if (authanticate.code !== value.code) {
+    res.status(404).json({ message: "Wrong Code" });
+    return;
+  }
+
+  let user = await nonAuthUserModel.findById(req.params.id);
+  //check if he is authanticated
+  if (!user) {
+    user = await AuthUserModel.findById(req.params.id);
+    if (!user) {
+      res.status(404).json({ message: "Data not found" });
+      return;
+    }
+    res.status(200).json(user);
+    return;
+  }
 
   if (error) {
     res.status(400).json(error);
     return error;
   }
-  const authanticate = await tokenModel.findOne({ code: req.body.code });
 
-  if (!authanticate) {
-    res.status(404).json({ message: "Code is either wrong or doesnt exist" });
+  console.log(user);
+
+  const newUser = await AuthUserModel.create({
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    phone: user.phone,
+    password: user.password,
+  }).catch((err) => {}); // to catch error
+
+  if (!newUser) {
+    res.status(403).json({ message: "Email Already exist" });
     return;
   }
-  console.log(authanticate.user_id);
-  const user = await userModel.findByIdAndUpdate(
-    authanticate.user_id,
-    {
-      isAuthanticated: false,
-    },
-    { returnDocument: "after" }
-  );
-  if (!user) {
-    res.status(404).json({ message: "User doesnt exist" });
-    return;
-  }
-  // console.log(user);
-  res.status(200).json(user); // send response
+  const expirationDate = Date.now() + 30 * 60000;
+
+  const secret = speakeasy.generateSecret({ length: 20 });
+  const verificationCode = speakeasy.totp({
+    secret: secret.base32,
+    encoding: "base32",
+  });
+
+  const newToken = await tokenModel.create({
+    user_id: newUser._id,
+    token_id: uuidv4(),
+    code: verificationCode,
+    expire_at: expirationDate,
+  });
+
+  const authuser = newUser.toJSON();
+
+  res.status(200).json({
+    user: authuser,
+    token: newToken,
+    token_id: newToken.token,
+    expire_at: newToken.expire_at,
+    token_code: newToken.code,
+  }); // send response
 });
 
 router.post("/sign-in", async (req, res) => {

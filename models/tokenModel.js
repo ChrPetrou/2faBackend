@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const { Schema, model } = mongoose;
-const userModel = require("./userModel");
+const userModel = require("./nonAuthUserModel");
 
 const tokenSchema = new Schema({
   user_id: {
