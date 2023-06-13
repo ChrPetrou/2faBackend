@@ -187,7 +187,7 @@ router.post("/authanticate/:id", async (req, res) => {
   });
 
   const authuser = newUser.toJSON();
-
+  delete authuser.password;
   res.status(200).json({
     user: authuser,
     token: newToken,
@@ -200,9 +200,9 @@ router.post("/authanticate/:id", async (req, res) => {
 router.post("/sign-in", async (req, res) => {
   const { error, value } = signInSchema.validate(req.body);
 
-  const existingUser = await userModel
-    .findOne({ email: value.email })
-    .catch((err) => {});
+  const existingUser = await AuthUserModel.findOne({
+    email: value.email,
+  }).catch((err) => {});
 
   if (!existingUser) {
     return res.status(404).json({ message: "User not found" });
@@ -234,7 +234,8 @@ router.post("/sign-in", async (req, res) => {
   // }
 
   const user = existingUser.toJSON();
-  return res.status(200).json({ message: user });
+  delete user.password;
+  return res.status(200).json(user);
 });
 
 module.exports = router;
