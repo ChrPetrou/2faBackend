@@ -7,10 +7,11 @@ const UserSchema = new Schema({
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   password: { type: String, required: true },
-  createdAt: { type: Date, expires: "60m", default: Date.now },
+  isAuthanticated: { type: Boolean, required: true },
   email: {
     type: String,
     required: true,
+    unique: true,
   },
   phone: {
     type: String,
@@ -18,6 +19,6 @@ const UserSchema = new Schema({
   },
 });
 
-const userModel = model("nonAuthUser", UserSchema);
+const userModel = model("users", UserSchema);
 
 module.exports = userModel;

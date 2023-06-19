@@ -12,9 +12,10 @@ const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_TOKEN);
 
 const JoiExtended = Joi.extend(JoiPhoneNumber);
 const router = express.Router();
-const nonAuthUserModel = require("../models/nonAuthUserModel");
-const AuthUserModel = require("../models/authUserModel");
+
+const userModel = require("../models/userModel");
 const tokenModel = require("../models/tokenModel");
+const refreshTokenModel = require("../models/refreshTokenModel");
 
 const signInSchema = JoiExtended.object({
   email: Joi.string()
@@ -45,10 +46,14 @@ const registerSchema = JoiExtended.object({
 
 const authSchema = JoiExtended.object({
   code: Joi.number().required(),
+  email: Joi.string()
+    .email({ tlds: { allow: ["com", "net"] } })
+    .required(),
 });
 
 router.post("/register", async (req, res) => {
   const saltRounds = 10;
+  let newUser;
   const { error, value } = registerSchema.validate(req.body);
 
   if (error) {
@@ -65,23 +70,41 @@ router.post("/register", async (req, res) => {
 
   const hash = await bcrypt.hash(value.password, saltRounds);
 
-  const existingUser = await AuthUserModel.findOne({ email: value.email });
+  const existingUser = await userModel.findOne({ email: value.email });
   //check if email exist in auth Users
-  if (existingUser) {
+  if (existingUser?.isAuthanticated === true) {
     res.status(403).json({ message: "Email Already exist" });
     return;
   }
   //create a new register user
-  const newUser = await nonAuthUserModel
-    .create({
-      firstName: value.firstname,
-      lastName: value.surname,
-      isAuthanticated: false,
-      email: value.email,
-      phone: value.phone,
-      password: hash,
-    })
-    .catch((err) => {}); // to catch error
+  if (!existingUser) {
+    newUser = await userModel
+      .create({
+        firstName: value.firstname,
+        lastName: value.surname,
+        isAuthanticated: false,
+        email: value.email,
+        phone: value.phone,
+        password: hash,
+      })
+      .catch((err) => {}); // to catch error
+  } else {
+    //Update User
+    newUser = await userModel
+      .findOneAndUpdate(
+        { email: value.email },
+        {
+          firstName: value.firstname,
+          lastName: value.surname,
+          isAuthanticated: false,
+          email: value.email,
+          phone: value.phone,
+          password: hash,
+        },
+        { returnOriginal: false }
+      )
+      .catch((err) => {});
+  }
 
   if (!newUser) {
     res.status(403).json({ message: "Something Went Wrong" });
@@ -116,7 +139,7 @@ router.post("/register", async (req, res) => {
   const user = newUser.toJSON();
 
   return res.status(200).json({
-    user: newUser,
+    user: user,
     token: newToken,
     token_id: newToken.token,
     expire_at: newToken.expire_at,
@@ -124,53 +147,43 @@ router.post("/register", async (req, res) => {
   });
 });
 
-router.post("/authanticate/:id", async (req, res) => {
+router.post("/authanticate", async (req, res) => {
   const { error, value } = authSchema.validate(req.body);
-
-  const authanticate = await tokenModel.findOne({ user_id: req.params.id });
-  //check if token exist
-  if (!authanticate) {
-    res.status(404).json({ message: "Code is either wrong or doesnt exist" });
-    return;
-  }
-
-  //check if the code is correct
-  if (authanticate.code !== value.code) {
-    res.status(404).json({ message: "Wrong Code" });
-    return;
-  }
-
-  let user = await nonAuthUserModel.findById(req.params.id);
-  //check if he is authanticated
-  if (!user) {
-    user = await AuthUserModel.findById(req.params.id);
-    if (!user) {
-      res.status(404).json({ message: "Data not found" });
-      return;
-    }
-    res.status(200).json(user);
-    return;
-  }
 
   if (error) {
     res.status(400).json(error);
     return error;
   }
 
-  console.log(user);
-
-  const newUser = await AuthUserModel.create({
-    firstName: user.firstName,
-    lastName: user.lastName,
-    email: user.email,
-    phone: user.phone,
-    password: user.password,
-  }).catch((err) => {}); // to catch error
-
-  if (!newUser) {
-    res.status(403).json({ message: "Email Already exist" });
+  const auth_user = await userModel.findOne({ email: value.email });
+  //check if token exist
+  if (!auth_user) {
+    res.status(404).json({ message: "Email is either wrong or doesnt exist" });
     return;
   }
+  const auth_token = await tokenModel.findOne({ user_id: auth_user._id });
+
+  //check if the code is correct
+  if (!auth_token || auth_token?.code !== value.code) {
+    res.status(404).json({ message: "Token either expired or code is wrong" });
+    return;
+  }
+
+  let user = await userModel.findOneAndUpdate(
+    { email: auth_user.email },
+    {
+      isAuthanticated: true,
+    },
+    { returnOriginal: false }
+  );
+
+  //check if he is authanticated
+
+  if (!user) {
+    res.status(404).json({ message: "Data not found" });
+    return;
+  }
+
   const expirationDate = Date.now() + 30 * 60000;
 
   const secret = speakeasy.generateSecret({ length: 20 });
@@ -180,13 +193,14 @@ router.post("/authanticate/:id", async (req, res) => {
   });
 
   const newToken = await tokenModel.create({
-    user_id: newUser._id,
+    user_id: user._id,
     token_id: uuidv4(),
     code: verificationCode,
     expire_at: expirationDate,
   });
 
-  const authuser = newUser.toJSON();
+  const authuser = user.toJSON();
+
   delete authuser.password;
   res.status(200).json({
     user: authuser,
@@ -200,19 +214,15 @@ router.post("/authanticate/:id", async (req, res) => {
 router.post("/sign-in", async (req, res) => {
   const { error, value } = signInSchema.validate(req.body);
 
-  const existingUser = await AuthUserModel.findOne({
-    email: value.email,
-  }).catch((err) => {});
-
-  if (!existingUser) {
-    return res.status(404).json({ message: "User not found" });
+  if (error) {
+    res.status(400).json(error);
+    return error;
   }
+  const existingUser = await userModel.findOne({ email: value.email });
 
-  if (existingUser.isAuthanticated === false) {
-    const deletedUser = await userModel.findOneAndDelete({
-      _id: existingUser._id,
-    });
-    console.log(deletedUser);
+  console.log(existingUser);
+
+  if (!existingUser || existingUser?.isAuthanticated === false) {
     return res.status(404).json({ message: "User not found" });
   }
 
@@ -222,6 +232,22 @@ router.post("/sign-in", async (req, res) => {
     res.status(403).json({ message: "Wrong Password" });
     return;
   }
+
+  const secret = speakeasy.generateSecret({ length: 20 });
+  const verificationCode = speakeasy.totp({
+    secret: secret.base32,
+    encoding: "base32",
+  });
+
+  const expirationDate = Date.now() + 30 * 60000;
+
+  const newToken = await tokenModel.create({
+    user_id: newUser._id,
+    token_id: uuidv4(),
+    code: verificationCode,
+    state: "register",
+    expire_at: expirationDate,
+  });
 
   // try {
   //   await twilioClient.messages.create({

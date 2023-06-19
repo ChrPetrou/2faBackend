@@ -10,9 +10,9 @@ const tokenSchema = new Schema({
   },
   token_id: { type: String, unique: true, required: true },
   code: { type: Number, required: true },
-  expire_at: { type: Date, required: true },
+  createdAt: { type: Date, expires: "60m", default: Date.now },
 });
 
-const tokenModel = model("token", tokenSchema);
+const tokenModel = model("refresh_token", tokenSchema);
 
 module.exports = tokenModel;
