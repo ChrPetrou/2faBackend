@@ -13,6 +13,6 @@ const tokenSchema = new Schema({
   createdAt: { type: Date, expires: "60m", default: Date.now },
 });
 
-const tokenModel = model("refresh_token", tokenSchema);
+const tokenModel = model("auth_token", tokenSchema);
 
 module.exports = tokenModel;

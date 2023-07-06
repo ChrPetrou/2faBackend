@@ -15,7 +15,7 @@ const router = express.Router();
 
 const userModel = require("../models/userModel");
 const tokenModel = require("../models/tokenModel");
-const refreshTokenModel = require("../models/refreshTokenModel");
+const authTokenModel = require("../models/authTokenModel");
 
 const signInSchema = JoiExtended.object({
   email: Joi.string()
@@ -117,14 +117,13 @@ router.post("/register", async (req, res) => {
     encoding: "base32",
   });
 
-  const expirationDate = Date.now() + 30 * 60000;
+  // const expirationDate = Date.now() + 30 * 60000;
 
-  const newToken = await tokenModel.create({
+  const newToken = await authTokenModel.create({
     user_id: newUser._id,
     token_id: uuidv4(),
     code: verificationCode,
-    state: "register",
-    expire_at: expirationDate,
+    // expire_at: expirationDate,
   });
 
   // try {
@@ -161,8 +160,10 @@ router.post("/authanticate", async (req, res) => {
     res.status(404).json({ message: "Email is either wrong or doesnt exist" });
     return;
   }
-  const auth_token = await tokenModel.findOne({ user_id: auth_user._id });
-
+  const auth_token = await authTokenModel.findOne({
+    user_id: auth_user._id,
+  });
+  console.log(auth_token);
   //check if the code is correct
   if (!auth_token || auth_token?.code !== value.code) {
     res.status(404).json({ message: "Token either expired or code is wrong" });
@@ -241,12 +242,10 @@ router.post("/sign-in", async (req, res) => {
 
   const expirationDate = Date.now() + 30 * 60000;
 
-  const newToken = await tokenModel.create({
-    user_id: newUser._id,
+  const newToken = await authTokenModel.create({
+    user_id: existingUser._id,
     token_id: uuidv4(),
     code: verificationCode,
-    state: "register",
-    expire_at: expirationDate,
   });
 
   // try {
@@ -261,7 +260,7 @@ router.post("/sign-in", async (req, res) => {
 
   const user = existingUser.toJSON();
   delete user.password;
-  return res.status(200).json(user);
+  return res.status(200).json({ user, newToken });
 });
 
 module.exports = router;
