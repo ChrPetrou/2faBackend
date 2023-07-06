@@ -160,12 +160,15 @@ router.post("/authanticate", async (req, res) => {
     res.status(404).json({ message: "Email is either wrong or doesnt exist" });
     return;
   }
-  const auth_token = await authTokenModel.findOne({
-    user_id: auth_user._id,
-  });
-  console.log(auth_token);
+  const auth_token = await authTokenModel.findOne(
+    { code: value.code },
+    {
+      user_id: auth_user._id,
+    }
+  );
+
   //check if the code is correct
-  if (!auth_token || auth_token?.code !== value.code) {
+  if (!auth_token && auth_token.user_id !== auth_user._id) {
     res.status(404).json({ message: "Token either expired or code is wrong" });
     return;
   }
