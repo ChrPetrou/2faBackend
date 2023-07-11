@@ -5,14 +5,14 @@ const JoiPhoneNumber = require("joi-phone-number");
 const { getCodes } = require("iso-3166-1-alpha-2");
 const twilio = require("twilio");
 const speakeasy = require("speakeasy");
-
+const rateLimiter = require("../rateLimiter");
 const { v4: uuidv4 } = require("uuid");
 require("dotenv").config();
 const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_TOKEN);
 
 const JoiExtended = Joi.extend(JoiPhoneNumber);
 const router = express.Router();
-
+const rateLimit = require("express-rate-limit");
 const userModel = require("../models/userModel");
 const tokenModel = require("../models/tokenModel");
 const authTokenModel = require("../models/authTokenModel");
@@ -51,7 +51,7 @@ const authSchema = JoiExtended.object({
     .required(),
 });
 
-router.post("/register", async (req, res) => {
+router.post("/register", rateLimiter, async (req, res) => {
   const saltRounds = 10;
   let newUser;
   const { error, value } = registerSchema.validate(req.body);
@@ -128,20 +128,17 @@ router.post("/register", async (req, res) => {
 
   // try {
   //   await twilioClient.messages.create({
-  //     to: phone,
+  //     to: value.phone,
   //     from: process.env.TWILIO_PHONE,
   //     body: `Your 2FA code is: ${verificationCode}`, // Replace with your actSual 2FA code
   //   });
   // } catch (error) {
-  //   return res.status(500).json({ error: "Failed to send SMS" });
+  //   return res.status(500).json({ error: error });
   // }
   const user = newUser.toJSON();
-
+  delete user.password;
   return res.status(200).json({
     user: user,
-    token: newToken,
-    token_id: newToken.token,
-    expire_at: newToken.expire_at,
     token_code: newToken.code,
   });
 });
@@ -217,7 +214,7 @@ router.post("/authanticate", async (req, res) => {
   }); // send response
 });
 
-router.post("/sign-in", async (req, res) => {
+router.post("/sign-in", rateLimit, async (req, res) => {
   const { error, value } = signInSchema.validate(req.body);
 
   if (error) {
